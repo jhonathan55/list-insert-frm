@@ -1,8 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Swal from 'sweetalert2'
-const Insert = ({ onSubmit }) => {
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
+
+const Insert = ({ onSubmit, onUpdateCollaborator, isUpdating, collaboratorToUpdate }) => {
     const [Collaborator, setCollaborator] = useState({
-        id: 0,
         name: '',
         email: ''
     });
@@ -10,8 +12,23 @@ const Insert = ({ onSubmit }) => {
         name: "form-control",
         email: "form-control"
     });
-    const nameInputRef = useRef(null);
-    const emailInputRef = useRef(null);
+    const [isUpdateMode, setIsUpdateMode] = useState(false);
+
+    // const nameInputRef = useRef(null);
+    // const emailInputRef = useRef(null);
+    useEffect(() => {
+        if (isUpdating && collaboratorToUpdate) {
+            setIsUpdateMode(true);
+            setCollaborator(collaboratorToUpdate);
+            setInputClasses({
+                name: "form-control is-valid",
+                email: "form-control is-valid",
+            });
+        } else {
+            setIsUpdateMode(false);
+            resetForm();
+        }
+    }, [isUpdating, collaboratorToUpdate]);
     const handleChange = (e) => {
         setCollaborator({
             ...Collaborator,
@@ -22,49 +39,69 @@ const Insert = ({ onSubmit }) => {
             [e.target.id]: e.target.value.trim() === "" ? "form-control is-invalid" : "form-control is-valid"
         });
     }
-    const saveCollaborator = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        //validar form
-        if (!Collaborator.name || !Collaborator.email) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Oops...',
-                text: 'Debes completar todos los campos!',
-                footer: '<a href="">Necesitas ayuda?</a>'
-            }).then(() => {
-                setInputClasses({
-                    name: Collaborator.name.trim() === "" ? "form-control is-invalid" : "form-control is-valid",
-                    email: Collaborator.email.trim() === "" ? "form-control is-invalid" : "form-control is-valid"
+        if (isUpdateMode) {
+            onUpdateCollaborator(Collaborator);
+            setIsUpdateMode(false);
+        } else {
+            try {
+                const docRef = await addDoc(collection(db, "collaborators"), {
+                    ...Collaborator,
+                    createdAt: serverTimestamp()
                 });
-                // Enfocar el input vacío
-                if (!Collaborator.name) {
-                    nameInputRef.current.focus();
-
-                } else if (!Collaborator.email) {
-                    emailInputRef.current.focus();
+                if (!docRef) {
+                    return Swal.fire({
+                        icon: 'error',
+                        title: 'Oops...',
+                        text: 'Something went wrong!',
+                    });
                 }
-            });
-            return;
+                console.log(docRef);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: 'Collaborator added successfully',
+                    showConfirmButton: false,
+                    timer: 1500,
+
+                })
+                onSubmit({
+                    id: docRef.id,
+                    ...Collaborator,
+                    createdAt: new Date(),
+                });
+                resetForm();
+            } catch (error) {
+                console.log(error);
+            }
         }
-        e.preventDefault();
-        onSubmit(Collaborator);
+    };
 
-    }
+    const resetForm = () => {
+        setCollaborator({
+            name: '',
+            email: ''
+        });
+        setInputClasses({
+            name: "form-control",
+            email: "form-control"
+        });
+        // nameInputRef.current.focus();
+    };
+
     return (
-
-        <form onSubmit={saveCollaborator}>
+        <form onSubmit={(event) => handleSubmit(event)}>
             <div className="mb-3">
                 <label for="name" className="form-label">Name</label>
-                <input type="text" className={inputClasses.name} id="name" onChange={handleChange} ref={nameInputRef} />
+                <input type="text" className={inputClasses.name} id="name" value={Collaborator.name} onChange={handleChange}  />
             </div>
             <div className="mb-3">
                 <label for="email" className="form-label">email</label>
-                <input type="text" className={inputClasses.email} id="email" onChange={handleChange} ref={emailInputRef} />
+                <input type="text" className={inputClasses.email} id="email" value={Collaborator.email} onChange={handleChange} />
             </div>
-
-            <button type="submit" className="btn btn-primary" >Save</button>
+            <button type="submit" className="btn btn-primary" >  {isUpdateMode ? "Actualizar" : "Guardar"}</button>
         </form>
-
     )
 }
 export default Insert;
